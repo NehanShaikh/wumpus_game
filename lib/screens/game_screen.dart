@@ -9,7 +9,8 @@ class GameScreen extends StatefulWidget {
   final GameLogic game;
   final VoidCallback? onGameSaved;
 
-  GameScreen({required this.game, this.onGameSaved});
+  const GameScreen({required this.game, this.onGameSaved, Key? key})
+      : super(key: key);
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -17,6 +18,7 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   late GameLogic game;
+  bool _gameEnded = false; // <<-- Flag to prevent multiple end-game calls
 
   @override
   void initState() {
@@ -25,11 +27,13 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _move(String direction) {
+    if (_gameEnded) return; // disable moves after game ends
     setState(() => game.move(direction));
     _checkGameEnd();
   }
 
   void _shoot(String direction) {
+    if (_gameEnded) return; // disable shooting after game ends
     setState(() {
       bool hit = game.shoot(direction);
       if (hit) {
@@ -44,44 +48,53 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _checkGameEnd() {
+    if (_gameEnded) return;
+
     if (game.state.status == "dead") {
+      _gameEnded = true;
       Future.microtask(() => _showDialog("You died! ☠️"));
     } else if (game.state.status == "won") {
+      _gameEnded = true;
       Future.microtask(() => _showDialog("You won! 🎉"));
     }
   }
 
   Future<void> _saveGame() async {
     final token = await AuthService.getToken();
-    if (token == null) return;
+    if (token == null) {
+      print("No token found, cannot save game");
+      return;
+    }
 
     final won = game.state.status == "won";
+    final saveData = {
+      "name": "Game ${DateTime.now()}",
+      "boardSize": game.state.boardSize,
+      "gameState": game.toJson(),
+      "difficulty": game.level.toString().split('.').last,
+      "wins": won ? 1 : 0,
+      "losses": won ? 0 : 1,
+      "matches": 1
+    };
 
     try {
+      print("Saving game with data: $saveData");
       final res = await http.post(
-        Uri.parse("http://192.168.70:5000/api/games/save"),
+        Uri.parse(
+            "https://nacreous-treva-downheartedly.ngrok-free.dev/api/games/save"),
         headers: {
           "Authorization": "Bearer $token",
           "Content-Type": "application/json"
         },
-        body: jsonEncode({
-          "name": "Game ${DateTime.now()}",
-          "boardSize": game.state.boardSize,
-          "gameState": game.toJson(),
-          "difficulty": game.level.toString().split('.').last,
-          "wins": won ? 1 : 0,
-          "losses": won ? 0 : 1,
-          "matches": 1
-        }),
+        body: jsonEncode(saveData),
       );
 
       if (res.statusCode == 200) {
-        print("Game saved successfully");
+        print("Game saved successfully: ${res.body}");
       } else {
-        print("Failed to save game: ${res.body}");
+        print("Failed to save game (status ${res.statusCode}): ${res.body}");
       }
 
-      // Refresh HomeScreen stats
       if (widget.onGameSaved != null) widget.onGameSaved!();
     } catch (e) {
       print("Error saving game: $e");
@@ -89,9 +102,10 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _showDialog(String msg) {
-    _saveGame(); // Save the game when it ends
+    _saveGame(); // Save the game once when it ends
     showDialog(
       context: context,
+      barrierDismissible: false, // <<-- Prevent closing by tapping outside
       builder: (_) => AlertDialog(
         title: const Text("Game Over"),
         content: Text(msg),

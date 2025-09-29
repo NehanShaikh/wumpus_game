@@ -5,46 +5,67 @@ import 'api_service.dart';
 class AuthService {
   /// Get saved JWT token
   static Future<String?> getToken() async {
-    return await ApiService.getToken();
+    final token = await ApiService.getToken();
+    print("AuthService.getToken: $token");
+    return token;
   }
 
-  /// Login and save token (debug version)
+  /// Login and save token
   static Future<bool> login(String email, String password) async {
-    // Temporary debug HTTP request
-    final res = await http.post(
-      Uri.parse("${ApiService.baseUrl}/auth/login"),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({
-        "email": email,
-        "password": password,
-      }),
-    );
+    try {
+      final res = await http.post(
+        Uri.parse("${ApiService.baseUrl}/auth/login"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "email": email,
+          "password": password,
+        }),
+      );
 
-    print("Login status: ${res.statusCode}");
-    print("Login body: ${res.body}");
+      print("Login status: ${res.statusCode}");
+      print("Login response: ${res.body}");
 
-    if (res.statusCode == 200) {
-      final body = jsonDecode(res.body);
-      await ApiService.saveToken(body['token']);
-      return true;
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body);
+        if (body['token'] != null) {
+          await ApiService.saveToken(body['token']);
+          print("Token saved successfully");
+          return true;
+        } else {
+          print("No token in response");
+        }
+      } else {
+        print("Login failed: ${res.body}");
+      }
+    } catch (e) {
+      print("Login error: $e");
     }
-
     return false;
   }
 
   /// Register new user
   static Future<bool> register(
       String name, String email, String password) async {
-    final res = await ApiService.post("/auth/register", {
-      "name": name,
-      "email": email,
-      "password": password,
-    });
-    return res.statusCode == 200;
+    try {
+      final res = await ApiService.post("/auth/register", {
+        "name": name,
+        "email": email,
+        "password": password,
+      });
+
+      print("Register status: ${res.statusCode}");
+      print("Register response: ${res.body}");
+
+      return res.statusCode == 200;
+    } catch (e) {
+      print("Register error: $e");
+      return false;
+    }
   }
 
   /// Logout
   static Future<void> logout() async {
+    print("Logging out, clearing token...");
     await ApiService.clearToken();
   }
 }

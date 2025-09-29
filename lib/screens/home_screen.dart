@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import 'difficulty_selector.dart';
 import 'game_screen.dart';
 import '../services/game_logic.dart';
+import 'login_screen.dart'; // import your login screen
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,20 +28,28 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => loading = true);
     final token = await AuthService.getToken();
     if (token == null) {
+      print("No token found, cannot fetch stats");
       setState(() => loading = false);
       return;
     }
 
     try {
       final res = await http.get(
-        Uri.parse("http://192.168.70:5000/api/games/stats"),
-        headers: {"Authorization": "Bearer $token"},
+        Uri.parse(
+            "https://nacreous-treva-downheartedly.ngrok-free.dev/api/games/stats"),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json"
+        },
       );
+
+      print("Stats response status: ${res.statusCode}");
+      print("Stats response body: ${res.body}");
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         setState(() {
-          stats = data["summary"];
+          stats = data["summary"] ?? {};
           loading = false;
         });
       } else {
@@ -53,89 +62,95 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<bool> _onWillPop() async {
+    // Clear token or keep it, depends on your logic
+    // await AuthService.clearToken();
+
+    // Navigate back to login page
+    Navigator.pushReplacement(
+        context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+    return false; // prevent default back navigation
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // 🎨 Full-screen Gradient Background
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF1e3c72), Color(0xFF2a5298)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+    return WillPopScope(
+      onWillPop: _onWillPop, // intercept back button
+      child: Scaffold(
+        body: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF1e3c72), Color(0xFF2a5298)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min, // keep buttons centered
-                children: [
-                  const Text(
-                    "🏹 Hunt the Wumpus",
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      shadows: [
-                        Shadow(
-                          offset: Offset(2, 2),
-                          blurRadius: 6,
-                          color: Colors.black45,
-                        )
-                      ],
+          child: SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      "🏹 Hunt the Wumpus",
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        shadows: [
+                          Shadow(
+                            offset: Offset(2, 2),
+                            blurRadius: 6,
+                            color: Colors.black45,
+                          )
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 40),
-
-                  // Start New Game
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 50, vertical: 15),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30)),
+                    const SizedBox(height: 40),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 50, vertical: 15),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30)),
+                      ),
+                      child: const Text("🎮 Start New Game"),
+                      onPressed: () => _showDifficultyDialog(context),
                     ),
-                    child: const Text("🎮 Start New Game"),
-                    onPressed: () => _showDifficultyDialog(context),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Saved Games
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purple,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 50, vertical: 15),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30)),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.purple,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 50, vertical: 15),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30)),
+                      ),
+                      child: const Text("💾 Saved Games"),
+                      onPressed: () {
+                        if (stats == null || stats!.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text("No saved games found.")),
+                          );
+                        } else {
+                          _showStatsDialog(context);
+                        }
+                      },
                     ),
-                    child: const Text("💾 Saved Games"),
-                    onPressed: () {
-                      if (stats == null || stats!.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text("No saved games found.")),
-                        );
-                      } else {
-                        _showStatsDialog(context);
-                      }
-                    },
-                  ),
-
-                  if (loading)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 20),
-                      child: CircularProgressIndicator(color: Colors.white),
-                    ),
-                ],
+                    if (loading)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 20),
+                        child: CircularProgressIndicator(color: Colors.white),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -203,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (_) => GameScreen(
           game: game,
-          onGameSaved: _fetchStats, // Refresh stats after game ends
+          onGameSaved: _fetchStats,
         ),
       ),
     );
