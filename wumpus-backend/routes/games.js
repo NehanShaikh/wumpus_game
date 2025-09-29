@@ -47,15 +47,16 @@ router.get('/', authMiddleware, async (req, res) => {
 
 // GET /api/games/stats -> get summary of user's game stats
 // GET /api/games/stats -> summary by difficulty
+// GET /api/games/stats
 router.get('/stats', authMiddleware, async (req, res) => {
   try {
+    console.log('Fetching stats for user:', req.user.id);
     const saves = await SavedGame.findAll({ where: { userId: req.user.id } });
+    console.log('Found saves:', saves.length);
 
     const summary = saves.reduce((acc, save) => {
-      const diff = (save.difficulty || "Easy").toLowerCase(); // lowercase for frontend
-      if (!acc[diff]) {
-        acc[diff] = { wins: 0, losses: 0, matches: 0 };
-      }
+      const diff = (save.difficulty || "Easy").toLowerCase();
+      if (!acc[diff]) acc[diff] = { wins: 0, losses: 0, matches: 0 };
       acc[diff].wins += save.wins;
       acc[diff].losses += save.losses;
       acc[diff].matches += save.matches;
@@ -122,7 +123,13 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 
 
 // POST /api/games/save
-router.post('/save', authMiddleware, async (req, res) => {
+router.post('/save', authMiddleware, [
+  body('boardSize').isInt({ min: 2 }),
+  body('gameState').notEmpty(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
   try {
     const { name, boardSize, gameState, difficulty, wins, losses, matches, metadata } = req.body;
 
@@ -135,7 +142,7 @@ router.post('/save', authMiddleware, async (req, res) => {
       wins: wins || 0,
       losses: losses || 0,
       matches: matches || 1,
-      metadata: metadata || {}
+      metadata: metadata || {},
     });
 
     return res.json({ message: 'Game saved', saved });
